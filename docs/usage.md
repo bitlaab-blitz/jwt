@@ -40,7 +40,7 @@ const token = try jwt.Jws(Userdata).encode(heap, key, .{
 });
 defer heap.free(token);
 
-std.debug.print("JWT Token: {s}", .{token});
+std.debug.print("JWT Token: {s}\n", .{token});
 ```
 
 ## Decode a JWT Token
