@@ -33,7 +33,7 @@ const Error = error {
 /// - `T` - Userdata structure (e.g., `Data { role: []const u8 }`).
 pub fn Jws(T: type) type {
     return struct {
-        const Claims = struct {
+        pub const Claims = struct {
             /// **Subject**
             /// - The identity the token refers to (e.g., a user ID).
             sub: Str,
