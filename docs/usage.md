@@ -45,7 +45,7 @@ std.debug.print("JWT Token: {s}\n", .{token});
 
 ## Decode a JWT Token
 
-Token validation is handled internally, which automatically verifies the signature, checks required claims such as exp (expiration), nbf (not before), and ensures the token is structurally valid and not tampered with. 
+Token validation is handled internally, which automatically verifies the signature, checks required claims such as exp (expiration), nbf (not before), and ensures the token is structurally valid and not tampered with.
 
 ```zig
 const token = "your jwt token...";

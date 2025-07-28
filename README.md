@@ -2,7 +2,7 @@
 
 **JSON Web Token**
 
-A minimal JSON Web Token (JWT) implementation using the HS256 algorithm for signing and verification, conforming to the JWS (JSON Web Signature) standard. Designed for secure, lightweight authentication in systems where symmetric key signing is sufficient.
+A minimal JSON Web Token (JWT) implementation using the **HS256** algorithm for signing and verification, conforming to the JWS (JSON Web Signature) standard. Designed for secure, lightweight authentication in systems where symmetric key signing is sufficient.
 
 ## Platform Support
 

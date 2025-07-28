@@ -1,15 +1,16 @@
 .{
     .name = .jwt,
-    .version = "0.5.0",
+    .version = "1.0.0",
     .fingerprint = 0x8d17cdf0b9f59aaf,
     .minimum_zig_version = "0.15.0-dev.832+1ca213dab",
     .dependencies = .{
         .jsonic = .{
-            .url = "https://github.com/bitlaab-bolt/jsonic/archive/refs/heads/main.zip",
-            .hash = "jsonic-0.5.0-Hz02HO4iAAAFDO8H8mHUhemYLAvhKd7U4VevpQxwCKtL",
+            .url = "https://github.com/bitlaab-bolt/jsonic/archive/refs/tags/v1.0.0.zip",
+            .hash = "jsonic-1.0.0-Hz02HDS35QBt9W964riTGBqdUKTaEXyfs_uNLOVuBDvJ",
         },
     },
     .paths = .{
+        "docs",
         "src",
         "build.zig",
         "build.zig.zon",
