@@ -1,12 +1,12 @@
 .{
     .name = .jwt,
-    .version = "1.0.0",
+    .version = "1.1.0",
     .fingerprint = 0x8d17cdf0b9f59aaf,
-    .minimum_zig_version = "0.15.0-dev.832+1ca213dab",
+    .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .jsonic = .{
-            .url = "https://github.com/bitlaab-bolt/jsonic/archive/refs/tags/v1.0.0.zip",
-            .hash = "jsonic-1.0.0-Hz02HDS35QBt9W964riTGBqdUKTaEXyfs_uNLOVuBDvJ",
+            .url = "https://github.com/bitlaab-bolt/jsonic/archive/refs/tags/v1.2.0.zip",
+            .hash = "jsonic-1.2.0-Hz02HJ_Y5QAQLS9CjEKgEiOQiQkqREjVL1SVTNlG033q",
         },
     },
     .paths = .{
