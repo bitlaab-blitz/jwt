@@ -9,8 +9,8 @@ const crypto = std.crypto;
 const Allocator = mem.Allocator;
 const HS256 = crypto.auth.hmac.sha2.HmacSha256;
 
-const Jsonic = @import("jsonic");
-const StaticJson = Jsonic.StaticJson;
+const jsonic = @import("jsonic");
+const StaticJSON = jsonic.StaticJSON;
 
 const utils = @import("./utils.zig");
 
@@ -39,13 +39,13 @@ pub fn Jws(T: type) type {
             sub: Str,
             /// **Expiration Time (in seconds)**
             /// - The time after which the token becomes invalid.
-            exp: i64,
+            exp: f64,
             /// **Not Before (in seconds)**
             /// - The time before which the token should be considered invalid.
-            nbf: i64,
+            nbf: f64,
             /// **Issued At (in seconds)**
             /// - The time when the token was issued, checks token freshness.
-            iat: i64,
+            iat: f64,
             /// **Issuer**
             /// - Identifies who issued the token (e.g., Auth server or URL).
             iss: Str,
@@ -62,7 +62,7 @@ pub fn Jws(T: type) type {
         /// # Encodes JWT Token
         /// **WARNING:** Return value must be freed by the caller.
         pub fn encode(heap: Allocator, key: Str, claims: Claims) !Str {
-            const claims_str = try StaticJson.stringify(heap, claims);
+            const claims_str = try StaticJSON.stringify(heap, claims);
             defer heap.free(claims_str);
 
             const buff = try heap.alloc(u8, utils.encodeSize(claims_str.len));
@@ -111,21 +111,21 @@ pub fn Jws(T: type) type {
             defer heap.free(buff);
             try utils.base64UrlDecode(buff, data);
 
-            const claims = try StaticJson.parse(Claims, heap, buff);
-            errdefer Jsonic.free(heap, claims) catch unreachable;
+            const claims = try StaticJSON.parse(Claims, heap, buff);
+            errdefer jsonic.free(heap, claims) catch unreachable;
 
-            const now = time.timestamp();
+            const now: f64 = @floatFromInt(time.timestamp());
             checkNotBefore(now, claims.nbf) catch |err| return err;
             checkExpiration(now, claims.exp) catch |err| return err;
 
             return claims;
         }
 
-        fn checkNotBefore(now: i64, nbf: i64) !void {
+        fn checkNotBefore(now: f64, nbf: f64) !void {
             if (now < nbf) return Error.NotValidYet;
         }
 
-        fn checkExpiration(now: i64, exp: i64) !void {
+        fn checkExpiration(now: f64, exp: f64) !void {
             if (now > exp) return Error.TokenExpired;
         }
     };
@@ -134,17 +134,18 @@ pub fn Jws(T: type) type {
 const Duration = enum { Second, Minute, Hour };
 
 /// # Returns the EPOCH Time Stamp in Seconds
-pub fn setTime(dur: Duration, value: u16) i64 {
-    const now = time.timestamp();
+pub fn setTime(dur: Duration, value: u16) f64 {
+    const val: f64 = @floatFromInt(value);
+    const now: f64 = @floatFromInt(time.timestamp());
 
     return switch (dur) {
-        .Second => now + value,
-        .Minute => now + (value * 60),
-        .Hour => now + (value * 60 * 60)
+        .Second => now + val,
+        .Minute => now + (val * 60),
+        .Hour => now + (val * 60 * 60)
     };
 }
 
 /// # Frees the Allocated Resources
 pub fn free(heap: Allocator, claims: anytype) !void {
-    try Jsonic.free(heap, claims);
+    try jsonic.free(heap, claims);
 }

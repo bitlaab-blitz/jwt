@@ -22,6 +22,15 @@ Here we write upgrading notes and make them as straightforward as possible.
 - A short description for fixed item 2
 - A short description for fixed item n
 
+
+## [v1.2.0] - 2025-09-15
+
+Breaking code changes required for Jsonic v1.3.0.
+
+### Changed
+
+- `setTime()` return type from `i64` to `f64`
+
 ## [v1.1.0] - 2025-09-13
 
 Minor code changes required for Zig v0.15.1 breaking changes.

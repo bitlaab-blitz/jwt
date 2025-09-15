@@ -3,7 +3,7 @@ const std = @import("std");
 const jwt = @import("jwt");
 
 pub fn main() !void {
-    std.debug.print("Hello, World!\n", .{});
+    std.debug.print("Code coverage examples\n", .{});
 
     // Write your code here...
 
