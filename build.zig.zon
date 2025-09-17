@@ -1,6 +1,6 @@
 .{
     .name = .jwt,
-    .version = "1.2.0",
+    .version = "1.2.1",
     .fingerprint = 0x8d17cdf0b9f59aaf,
     .minimum_zig_version = "0.15.1",
     .dependencies = .{

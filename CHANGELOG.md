@@ -23,6 +23,10 @@ Here we write upgrading notes and make them as straightforward as possible.
 - A short description for fixed item n
 
 
+## [v1.2.1] - 2025-09-17
+
+Minor BUG fix on `base64UrlDecode()`.
+
 ## [v1.2.0] - 2025-09-15
 
 Breaking code changes required for Jsonic v1.3.0.

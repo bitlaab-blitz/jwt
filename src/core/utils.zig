@@ -35,7 +35,6 @@ pub fn encodeSize(src_len: usize) usize {
 /// # Decodes from Base64 String
 pub fn base64UrlDecode(dest: []u8, src: Str) !void {
     const base64_url = Base64Decoder.init(char.*, null);
-    _ = try base64_url.decode(dest, src);
 
     var i: usize = 0;
     while (i < dest.len) : (i += 1) {
@@ -45,6 +44,8 @@ pub fn base64UrlDecode(dest: []u8, src: Str) !void {
             else => {} // NOP
         }
     }
+
+    _ = try base64_url.decode(dest, src);
 }
 
 /// # Returns the Calculated Decode Length
