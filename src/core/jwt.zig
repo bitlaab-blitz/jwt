@@ -34,10 +34,10 @@ const Error = error {
 };
 
 /// # Verification Options
-/// - `iss` - Expected issuer (optional).
-/// - `aud` - Expected audience (optional).
-pub const VerifyOptions = struct {
+const VerifyOptions = struct {
+    /// - `iss` - Expected issuer
     iss: ?Str = null,
+    /// - `aud` - Expected audience
     aud: ?Str = null
 };
 
@@ -176,7 +176,12 @@ pub fn Jws(T: type) type {
         /// - `opts.aud` - Expected audience (e.g., App name, API ID).
         ///
         /// **WARNING:** Return value must be freed by calling `Jwt.free()`.
-        pub fn verify(heap: Allocator, key: Str, token: Str, opts: VerifyOptions) !Claims {
+        pub fn verify(
+            heap: Allocator,
+            key: Str,
+            token: Str,
+            opts: VerifyOptions
+        ) !Claims {
             const claims = try decode(heap, key, token);
             errdefer jsonic.free(heap, claims);
 
@@ -316,6 +321,41 @@ test "not-yet-valid token is rejected" {
     defer heap.free(token);
 
     try std.testing.expectError(error.NotValidYet, Jws(Data).decode(heap, "secret", token));
+}
+
+test "structurally invalid tokens are rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+
+    // No '.' separators
+    try std.testing.expectError(error.InvalidFormat, Jws(Data).decode(heap, "secret", "not-a-token"));
+    // Only one '.' separator
+    try std.testing.expectError(error.InvalidFormat, Jws(Data).decode(heap, "secret", "a.b"));
+    // More than two '.' separators
+    try std.testing.expectError(error.InvalidFormat, Jws(Data).decode(heap, "secret", "a.b.c.d"));
+}
+
+test "malformed signature segment is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 0, .nbf = 0, .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    const bad = try heap.dupe(u8, token);
+    defer heap.free(bad);
+    bad[bad.len - 1] = '!'; // not a Base64URL character
+
+    try std.testing.expectError(error.InvalidSignature, Jws(Data).decode(heap, "secret", bad));
 }
 
 test "wrong key is rejected" {

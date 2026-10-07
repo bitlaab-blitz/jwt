@@ -26,9 +26,10 @@ Here we write upgrading notes and make them as straightforward as possible.
 
 Internal code refactoring, better documentation, and Zig-0.17.0 version support.
 
-### Changed
+### Added
 
-- TODO: Removed type requirement from Record Create in `builder.zig`
+- `alg` header, and other validations for strictness.
+- `Jws.verify()` for a claim verification.
 
 ## [v1.2.1] - 2025-09-17
 
