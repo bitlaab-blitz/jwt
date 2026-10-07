@@ -6,16 +6,16 @@ A minimal JSON Web Token (JWT) implementation using the **HS256** algorithm for 
 
 ## Platform Support
 
-Jwt has cross-platform support.
+Fully cross-platform.
 
 ## Dependency
 
 Jwt has the following external dependency:
 
-- [Jsonic](https://bitlaabjsonic.web.app/)
+- [Jsonic](https://bitlaab.com/api-doc?pkg=jsonic)
 
-No additional step is required to use this project as a package dependency.
+No additional steps are required to use this project as a package dependency.
 
 ## Documentation
 
-For most up-to-date documentation see - [**Jwt Documentation**](https://bitlaabjwt.web.app/).
+For most up-to-date documentation see - [**Jwt Documentation**](https://bitlaab.com/api-doc?pkg=jwt).

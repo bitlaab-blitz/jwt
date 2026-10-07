@@ -112,9 +112,14 @@ pub fn Jws(T: type) type {
             try utils.base64UrlDecode(buff, data);
 
             const claims = try StaticJSON.parse(Claims, heap, buff);
-            errdefer jsonic.free(heap, claims) catch unreachable;
+            errdefer jsonic.free(heap, claims);
 
-            const now: f64 = @floatFromInt(time.timestamp());
+            var threaded: std.Io.Threaded = .init_single_threaded;
+            const io = threaded.io();
+            const now: f64 = @floatFromInt(
+                std.Io.Clock.real.now(io).toSeconds()
+            );
+
             checkNotBefore(now, claims.nbf) catch |err| return err;
             checkExpiration(now, claims.exp) catch |err| return err;
 
@@ -136,7 +141,12 @@ const Duration = enum { Second, Minute, Hour };
 /// # Returns the EPOCH Time Stamp in Seconds
 pub fn setTime(dur: Duration, value: u16) f64 {
     const val: f64 = @floatFromInt(value);
-    const now: f64 = @floatFromInt(time.timestamp());
+
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    const now: f64 = @floatFromInt(
+        std.Io.Clock.real.now(io).toSeconds()
+    );
 
     return switch (dur) {
         .Second => now + val,
@@ -146,6 +156,6 @@ pub fn setTime(dur: Duration, value: u16) f64 {
 }
 
 /// # Frees the Allocated Resources
-pub fn free(heap: Allocator, claims: anytype) !void {
-    try jsonic.free(heap, claims);
+pub fn free(heap: Allocator, claims: anytype) void {
+    jsonic.free(heap, claims);
 }

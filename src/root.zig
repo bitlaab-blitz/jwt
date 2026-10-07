@@ -1,5 +1,5 @@
 //! # JSON Web Token
-//! - See documentation at - https://bitlaabjwt.web.app/
+//! - See documentation at - https://bitlaab.com/api-doc?pkg=jwt
 
 const jwt = @import("./core/jwt.zig");
 

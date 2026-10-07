@@ -36,5 +36,5 @@ pub fn main() !void {
 
     const claims = try jwt.Jws(Data).decode(heap, key, token);
     std.debug.print("{any}\n", .{claims});
-    try jwt.free(heap, claims);
+    jwt.free(heap, claims);
 }
