@@ -26,7 +26,19 @@ const Error = error {
     TokenExpired,
     InvalidFormat,
     MalformedToken,
-    InvalidSignature
+    InvalidSignature,
+    UnsupportedAlgorithm,
+    InvalidIssuedAt,
+    InvalidIssuer,
+    InvalidAudience
+};
+
+/// # Verification Options
+/// - `iss` - Expected issuer (optional).
+/// - `aud` - Expected audience (optional).
+pub const VerifyOptions = struct {
+    iss: ?Str = null,
+    aud: ?Str = null
 };
 
 /// # JSON Web Signature
@@ -44,7 +56,8 @@ pub fn Jws(T: type) type {
             /// - The time before which the token should be considered invalid.
             nbf: f64,
             /// **Issued At (in seconds)**
-            /// - The time when the token was issued, checks token freshness.
+            /// - The time when the token was issued. Validated on decode:
+            ///   a token issued in the future is rejected.
             iat: f64,
             /// **Issuer**
             /// - Identifies who issued the token (e.g., Auth server or URL).
@@ -83,7 +96,7 @@ pub fn Jws(T: type) type {
         }
 
         /// # Decodes JWT Token
-        /// **WARNING:** You must call `Jwt.free()` after use.
+        /// **WARNING:** Return value must be freed by calling `Jwt.free()`.
         pub fn decode(heap: Allocator, key: Str, token: Str) !Claims {
             if (mem.count(u8, token, ".") != 2) return Error.InvalidFormat;
 
@@ -98,18 +111,49 @@ pub fn Jws(T: type) type {
             var mac: [HS256.mac_length]u8 = undefined;
             HS256.create(&mac, payload, key);
 
-            const sig = try heap.alloc(u8, utils.encodeSize(mac.len));
-            defer heap.free(sig);
-            try utils.base64UrlEncode(sig, &mac);
+            // Validates the signature against the recomputed MAC
+            if (hash.len != utils.encodeSize(mac.len))
+                return Error.InvalidSignature;
 
-            // Validates the signature
-            if (sig.len != hash.len) return Error.InvalidSignature;
-            const order = crypto.timing_safe.compare(u8, sig, hash, .little);
-            if (order != .eq) return Error.InvalidSignature;
+            var provided: [HS256.mac_length]u8 = undefined;
+            utils.base64UrlDecode(&provided, hash)
+            catch return Error.InvalidSignature;
 
-            const buff = try heap.alloc(u8, try utils.decodeSize(data));
+            if (!crypto.timing_safe.eql([HS256.mac_length]u8, mac, provided)) {
+                return Error.InvalidSignature;
+            }
+
+            // Validates the `alg` header (RFC 8725 #3.1)
+            const header_len = utils.decodeSize(algo)
+            catch return Error.MalformedToken;
+
+            const header_buff = try heap.alloc(u8, header_len);
+            defer heap.free(header_buff);
+
+            utils.base64UrlDecode(header_buff, algo)
+            catch return Error.MalformedToken;
+
+            var header_json = jsonic.DynamicJSON.init(heap, header_buff, .{})
+            catch return Error.MalformedToken;
+            defer header_json.deinit();
+
+            switch (header_json.data()) {
+                .object => |obj| {
+                    const alg = obj.get("alg") orelse return Error.MalformedToken;
+                    const alg_name = switch (alg) {
+                        .string => |s| s,
+                        else => return Error.MalformedToken
+                    };
+                    if (!mem.eql(u8, alg_name, "HS256")) return Error.UnsupportedAlgorithm;
+                },
+                else => return Error.MalformedToken
+            }
+
+            const buff = try heap.alloc(u8, utils.decodeSize(data)
+            catch return Error.MalformedToken);
             defer heap.free(buff);
-            try utils.base64UrlDecode(buff, data);
+
+            utils.base64UrlDecode(buff, data) catch return Error.MalformedToken;
 
             const claims = try StaticJSON.parse(Claims, heap, buff);
             errdefer jsonic.free(heap, claims);
@@ -121,13 +165,37 @@ pub fn Jws(T: type) type {
             );
 
             checkNotBefore(now, claims.nbf) catch |err| return err;
+            checkIssuedAt(now, claims.iat) catch |err| return err;
             checkExpiration(now, claims.exp) catch |err| return err;
+
+            return claims;
+        }
+
+        /// # Decodes JWT Token and Enforces Claims
+        /// - `opts.iss` - Expected issuer (e.g., Auth server or URL).
+        /// - `opts.aud` - Expected audience (e.g., App name, API ID).
+        ///
+        /// **WARNING:** Return value must be freed by calling `Jwt.free()`.
+        pub fn verify(heap: Allocator, key: Str, token: Str, opts: VerifyOptions) !Claims {
+            const claims = try decode(heap, key, token);
+            errdefer jsonic.free(heap, claims);
+
+            if (opts.iss) |iss| {
+                if (!mem.eql(u8, claims.iss, iss)) return Error.InvalidIssuer;
+            }
+            if (opts.aud) |aud| {
+                if (!mem.eql(u8, claims.aud, aud)) return Error.InvalidAudience;
+            }
 
             return claims;
         }
 
         fn checkNotBefore(now: f64, nbf: f64) !void {
             if (now < nbf) return Error.NotValidYet;
+        }
+
+        fn checkIssuedAt(now: f64, iat: f64) !void {
+            if (now < iat) return Error.InvalidIssuedAt;
         }
 
         fn checkExpiration(now: f64, exp: f64) !void {
@@ -158,4 +226,201 @@ pub fn setTime(dur: Duration, value: u16) f64 {
 /// # Frees the Allocated Resources
 pub fn free(heap: Allocator, claims: anytype) void {
     jsonic.free(heap, claims);
+}
+
+test "round trip with URL-safe chars in payload" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "~~~~~", // forces '-'/'_' into the base64url payload
+        .iss = "example.com",
+        .aud = "hydra",
+        .data = .{ .role = "admin" },
+        .iat = 0,
+        .nbf = 0,
+        .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    // Assert the payload segment itself contains URL-safe characters so the
+    // decode path is genuinely exercised (not just the signature segment).
+    const dot1 = std.mem.indexOfScalar(u8, token, '.').?;
+    const dot2 = std.mem.lastIndexOfScalar(u8, token, '.').?;
+    const payload = token[dot1 + 1 .. dot2];
+    try std.testing.expect(std.mem.indexOfAny(u8, payload, "-_") != null);
+
+    const claims = try Jws(Data).decode(heap, "secret", token);
+    defer free(heap, claims);
+    try std.testing.expectEqualStrings("~~~~~", claims.sub);
+}
+
+test "base64url decode handles URL-safe alphabet" {
+    // "\xff\xff\xbb" encodes to "///+" in std base64, i.e. "__-7" in base64url
+    const src = "__-7";
+    var dest: [3]u8 = undefined;
+    try utils.base64UrlDecode(&dest, src);
+    try std.testing.expectEqualSlices(u8, &.{ 0xFF, 0xFF, 0xBB }, &dest);
+}
+
+test "tampered signature is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 0, .nbf = 0, .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    const bad = try heap.dupe(u8, token);
+    defer heap.free(bad);
+    bad[bad.len - 1] ^= 1;
+
+    try std.testing.expectError(error.InvalidSignature, Jws(Data).decode(heap, "secret", bad));
+}
+
+test "expired token is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 0, .nbf = 0, .exp = 1,
+    });
+    defer heap.free(token);
+
+    try std.testing.expectError(error.TokenExpired, Jws(Data).decode(heap, "secret", token));
+}
+
+test "not-yet-valid token is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 0, .exp = 9999999999,
+        .nbf = 9999999999,
+    });
+    defer heap.free(token);
+
+    try std.testing.expectError(error.NotValidYet, Jws(Data).decode(heap, "secret", token));
+}
+
+test "wrong key is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 0, .nbf = 0, .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    try std.testing.expectError(error.InvalidSignature, Jws(Data).decode(heap, "other", token));
+}
+
+test "non-HS256 alg header is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    // Craft a token whose header declares alg "none" but carries a valid HS256 MAC
+    const header_json = "{\"alg\":\"none\",\"typ\":\"JWT\"}";
+    const claims_json = "{\"sub\":\"a\",\"exp\":9999999999,\"nbf\":0,\"iat\":0,\"iss\":\"i\",\"aud\":\"a\",\"data\":{\"role\":\"admin\"}}";
+
+    const hbuf = try heap.alloc(u8, utils.encodeSize(header_json.len));
+    defer heap.free(hbuf);
+    try utils.base64UrlEncode(hbuf, header_json);
+
+    const pbuf = try heap.alloc(u8, utils.encodeSize(claims_json.len));
+    defer heap.free(pbuf);
+    try utils.base64UrlEncode(pbuf, claims_json);
+
+    const data = try fmt.allocPrint(heap, "{s}.{s}", .{ hbuf, pbuf });
+    defer heap.free(data);
+
+    var mac: [HS256.mac_length]u8 = undefined;
+    HS256.create(&mac, data, "secret");
+
+    const sig = try heap.alloc(u8, utils.encodeSize(mac.len));
+    defer heap.free(sig);
+    try utils.base64UrlEncode(sig, &mac);
+
+    const token = try fmt.allocPrint(heap, "{s}.{s}", .{data, sig});
+    defer heap.free(token);
+
+    const Data = struct { role: []const u8 };
+    try std.testing.expectError(error.UnsupportedAlgorithm, Jws(Data).decode(heap, "secret", token));
+}
+
+test "tampered header is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 0, .nbf = 0, .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    const bad = try heap.dupe(u8, token);
+    defer heap.free(bad);
+    bad[5] ^= 1; // flip a char inside the header segment
+
+    try std.testing.expectError(error.InvalidSignature, Jws(Data).decode(heap, "secret", bad));
+}
+
+test "token issued in the future is rejected" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "i", .aud = "a",
+        .data = .{ .role = "admin" },
+        .iat = 9999999999, .nbf = 0, .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    try std.testing.expectError(error.InvalidIssuedAt, Jws(Data).decode(heap, "secret", token));
+}
+
+test "verify enforces issuer and audience" {
+    var gpa_mem = std.heap.DebugAllocator(.{}).init;
+    defer std.debug.assert(gpa_mem.deinit() == .ok);
+    const heap = gpa_mem.allocator();
+
+    const Data = struct { role: []const u8 };
+    const token = try Jws(Data).encode(heap, "secret", .{
+        .sub = "a", .iss = "example.com", .aud = "hydra",
+        .data = .{ .role = "admin" },
+        .iat = 0, .nbf = 0, .exp = 9999999999,
+    });
+    defer heap.free(token);
+
+    try std.testing.expectError(error.InvalidIssuer, Jws(Data).verify(heap, "secret", token, .{ .iss = "evil.com" }));
+    try std.testing.expectError(error.InvalidAudience, Jws(Data).verify(heap, "secret", token, .{ .aud = "other" }));
+
+    const claims = try Jws(Data).verify(heap, "secret", token, .{ .iss = "example.com", .aud = "hydra" });
+    defer free(heap, claims);
+    try std.testing.expectEqualStrings("hydra", claims.aud);
 }
