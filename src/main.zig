@@ -9,12 +9,11 @@ const Userdata = struct {
     feature: []const []const u8
 };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     std.debug.print("Code coverage examples\n", .{});
 
-    var gpa_mem = std.heap.DebugAllocator(.{}).init;
-    defer std.debug.assert(gpa_mem.deinit() == .ok);
-    const heap = gpa_mem.allocator();
+    const heap = init.gpa;
+    const io = init.io;
 
     const key = "secret";
 
@@ -27,16 +26,16 @@ pub fn main() !void {
             .role = "admin",
             .feature = &.{"foo", "bar"}
         },
-        .iat = jwt.setTime(.Second, 0),
-        .nbf = jwt.setTime(.Second, 0),
-        .exp = jwt.setTime(.Minute, 2)
+        .iat = jwt.setTime(io, .Second, 0),
+        .nbf = jwt.setTime(io, .Second, 0),
+        .exp = jwt.setTime(io, .Minute, 2)
     });
     defer heap.free(token);
 
     std.debug.print("Token: {s}\n", .{token});
 
     // Decode a JWT Token
-    const claims = try jwt.Jws(Userdata).decode(heap, key, token);
+    const claims = try jwt.Jws(Userdata).decode(heap, io, key, token);
     defer jwt.free(heap, claims);
 
     std.debug.print("Decoded: sub={s}, role={s}, features={d}\n", .{
@@ -44,7 +43,7 @@ pub fn main() !void {
     });
 
     // Verify with issuer and audience enforcement
-    const verified = try jwt.Jws(Userdata).verify(heap, key, token, .{
+    const verified = try jwt.Jws(Userdata).verify(heap, io, key, token, .{
         .iss = "example.com",
         .aud = "hydra"
     });
@@ -53,7 +52,7 @@ pub fn main() !void {
     std.debug.print("Verified: iss={s}, aud={s}\n", .{ verified.iss, verified.aud });
 
     // A mismatching audience is rejected
-    if (jwt.Jws(Userdata).verify(heap, key, token, .{ .aud = "other" })) |_| {
+    if (jwt.Jws(Userdata).verify(heap, io, key, token, .{ .aud = "other" })) |_| {
         return error.UnexpectedSuccess;
     } else |err| {
         std.debug.print("verify(aud = \"other\") -> {s}\n", .{@errorName(err)});
@@ -64,7 +63,7 @@ pub fn main() !void {
     defer heap.free(tampered);
     tampered[tampered.len - 1] ^= 1;
 
-    if (jwt.Jws(Userdata).decode(heap, key, tampered)) |_| {
+    if (jwt.Jws(Userdata).decode(heap, io, key, tampered)) |_| {
         return error.UnexpectedSuccess;
     } else |err| {
         std.debug.print("tampered token -> {s}\n", .{@errorName(err)});
@@ -79,13 +78,13 @@ pub fn main() !void {
             .role = "admin",
             .feature = &.{"foo", "bar"}
         },
-        .iat = jwt.setTime(.Second, 0),
+        .iat = jwt.setTime(io, .Second, 0),
         .nbf = 0,
         .exp = 1
     });
     defer heap.free(stale);
 
-    if (jwt.Jws(Userdata).decode(heap, key, stale)) |_| {
+    if (jwt.Jws(Userdata).decode(heap, io, key, stale)) |_| {
         return error.UnexpectedSuccess;
     } else |err| {
         std.debug.print("expired token -> {s}\n", .{@errorName(err)});
@@ -106,7 +105,7 @@ pub fn main() !void {
     });
     defer heap.free(premature);
 
-    if (jwt.Jws(Userdata).decode(heap, key, premature)) |_| {
+    if (jwt.Jws(Userdata).decode(heap, io, key, premature)) |_| {
         return error.UnexpectedSuccess;
     } else |err| {
         std.debug.print("future issued token -> {s}\n", .{@errorName(err)});
@@ -115,7 +114,7 @@ pub fn main() !void {
     // Structurally invalid tokens are rejected
     const garbage = "not-a-jwt-token";
 
-    if (jwt.Jws(Userdata).decode(heap, key, garbage)) |_| {
+    if (jwt.Jws(Userdata).decode(heap, io, key, garbage)) |_| {
         return error.UnexpectedSuccess;
     } else |err| {
         std.debug.print("invalid token -> {s}\n", .{@errorName(err)});

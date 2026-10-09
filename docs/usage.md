@@ -9,16 +9,16 @@ const jwt = @import("jwt");
 Now, add the following code into your main function.
 
 ```zig
-var gpa_mem = std.heap.DebugAllocator(.{}).init;
-defer std.debug.assert(gpa_mem.deinit() == .ok);
-const heap = gpa_mem.allocator();
+pub fn main(init: std.process.Init) !void {
+    const heap = init.gpa;
+    const io = init.io;
 ```
 
 ## Setting the Time Claims
 
 `setTime` returns an EPOCH timestamp (in seconds) relative to the current
-time. It accepts a duration and a value, e.g. `setTime(.Minute, 2)` means
-"two minutes from now".
+time. It accepts an `Io`, a duration and a value, e.g.
+`setTime(io, .Minute, 2)` means "two minutes from now".
 
 | Duration  | Meaning                       |
 |-----------|-------------------------------|
@@ -46,9 +46,9 @@ const token = try jwt.Jws(Userdata).encode(heap, key, .{
         .role = "admin",
         .feature = &.{"foo", "bar"}
     },
-    .iat = jwt.setTime(.Second, 0),
-    .nbf = jwt.setTime(.Second, 0),
-    .exp = jwt.setTime(.Minute, 2)
+    .iat = jwt.setTime(io, .Second, 0),
+    .nbf = jwt.setTime(io, .Second, 0),
+    .exp = jwt.setTime(io, .Minute, 2)
 });
 defer heap.free(token);
 
@@ -71,7 +71,7 @@ Token validation is handled internally, which automatically:
 ```zig
 const token = "your jwt token...";
 
-const claims = try jwt.Jws(Userdata).decode(heap, key, token);
+const claims = try jwt.Jws(Userdata).decode(heap, io, key, token);
 std.debug.print("{any}\n", .{claims});
 jwt.free(heap, claims);
 ```
@@ -83,7 +83,7 @@ checking them is the application's responsibility. Use `verify` when you
 want the library to enforce the expected issuer and/or audience for you.
 
 ```zig
-const claims = try jwt.Jws(Userdata).verify(heap, key, token, .{
+const claims = try jwt.Jws(Userdata).verify(heap, io, key, token, .{
     .iss = "example.com",
     .aud = "hydra"
 });
@@ -94,7 +94,7 @@ Both options are optional; pass only what you need:
 
 ```zig
 // Enforce audience only
-const claims = try jwt.Jws(Userdata).verify(heap, key, token, .{
+const claims = try jwt.Jws(Userdata).verify(heap, io, key, token, .{
     .aud = "hydra"
 });
 jwt.free(heap, claims);
@@ -118,7 +118,7 @@ an `if ... else |err|` block, and use `@errorName` to inspect.
 | `InvalidAudience`     | `aud` does not match the expected audience (verify only) |
 
 ```zig
-if (jwt.Jws(Userdata).decode(heap, key, token)) |claims| {
+if (jwt.Jws(Userdata).decode(heap, io, key, token)) |claims| {
     defer jwt.free(heap, claims);
     // ... authenticated
 } else |err| switch (err) {
