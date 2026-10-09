@@ -6,7 +6,7 @@
     .dependencies = .{
         .jsonic = .{
             .url = "https://github.com/bitlaab-bolt/jsonic/archive/refs/tags/v1.6.0.zip",
-            .hash = "jsonic-1.6.0-Hz02HCPQ5gAes5oFvPM5JNytG0dx_oltSDEmwUYADmNh",
+            .hash = "jsonic-1.6.0-Hz02HBfU5gB1VIYobVH6V5qsPgcJgXAG2PiwS9I-DiwU",
         },
     },
     .paths = .{
